@@ -1,0 +1,405 @@
+<!--
+Simple single-file frontend for SalesTracker
+Features:
+- Create transaction (income/expense)
+- View transactions table with filters, sorting
+- Update & delete transactions (basic UX)
+- Export transactions CSV
+- Analytics view: group by day/month/year, split by type/category, sort by aggregates, CSV export
+- Uses vanilla JS + Chart.js (CDN) for charts
+
+Notes:
+- Expects backend at /api as defined in server routes
+- Query params used: from, to, type, category, sortBy, sortDir, groupby, splitby
+- CSV endpoints: /api/items/export and /api/analytics/export
+- CORS: if frontend served from different origin, enable CORS on backend
+--> 
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SalesTracker — UI</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#9aa4b2;--accent:#7c3aed;--ok:#16a34a;--danger:#ef4444;--glass:rgba(255,255,255,0.03)}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;color:#e6eef6;background:linear-gradient(180deg,#071024 0%, #071737 100%);}
+    .app{max-width:1100px;margin:24px auto;padding:20px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    h1{margin:0;font-size:20px}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
+    .card{background:var(--card);padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);background:var(--glass);color:inherit}
+    button{background:var(--accent);color:white;padding:8px 12px;border-radius:8px;border:0;cursor:pointer}
+    .muted{color:var(--muted);font-size:13px}
+    table{width:100%;border-collapse:collapse;color:#dbeafe;margin-top:8px}
+    th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left;font-size:13px}
+    th{color:var(--muted);font-weight:600}
+    .row-actions button{margin-right:6px;padding:6px 8px;font-size:13px}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .chart-wrap{height:260px}
+    .small{font-size:12px}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    @media (max-width:960px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>SalesTracker — Dashboard</h1>
+      <div class="muted">Simple UI • CRUD + Analytics + CSV</div>
+    </header>
+
+    <div class="grid">
+      <div>
+        <div class="card" id="createCard">
+          <h3>Create / Update Transaction</h3>
+          <form id="txForm">
+            <input type="hidden" id="txId" />
+            <label>Type</label>
+            <select id="txType"><option value="income">Income</option><option value="expense">Expense</option></select>
+            <label>Category</label>
+            <input id="txCategory" placeholder="e.g. salary, groceries" />
+            <label>Amount</label>
+            <input id="txAmount" type="number" step="0.01" placeholder="12.34" />
+            <label>Date (ISO)</label>
+            <input id="txDate" type="date" />
+            <label>Description</label>
+            <textarea id="txDesc" rows="2"></textarea>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button id="saveBtn" type="button">Save</button>
+              <button id="resetBtn" type="button" style="background:#334155">Reset</button>
+            </div>
+            <div id="formMsg" class="muted small" style="margin-top:8px"></div>
+          </form>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Transactions</h3>
+          <div class="toolbar" style="margin-bottom:8px">
+            <label class="small">From</label>
+            <input id="filterFrom" type="date" />
+            <label class="small">To</label>
+            <input id="filterTo" type="date" />
+            <label class="small">Type</label>
+            <select id="filterType"><option value="">All</option><option value="income">Income</option><option value="expense">Expense</option></select>
+            <label class="small">Category</label>
+            <input id="filterCategory" placeholder="optional" />
+            <label class="small">Sort</label>
+            <select id="filterSortBy"><option value="date">date</option><option value="amount">amount</option><option value="type">type</option></select>
+            <select id="filterSortDir"><option value="desc">desc</option><option value="asc">asc</option></select>
+            <button id="applyFilters">Apply</button>
+            <button id="exportCsv">Export CSV</button>
+          </div>
+
+          <div id="txMsg" class="muted small">Load a range and click Apply.</div>
+          <div style="overflow:auto;max-height:360px;margin-top:8px">
+            <table id="txTable">
+              <thead><tr><th>ID</th><th>Type</th><th>Category</th><th>Amount</th><th>Date</th><th>Description</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3>Analytics</h3>
+          <div class="toolbar" style="margin-bottom:8px">
+            <label class="small">From</label>
+            <input id="anFrom" type="date" />
+            <label class="small">To</label>
+            <input id="anTo" type="date" />
+            <label class="small">Group By</label>
+            <select id="anGroupBy"><option value="day">day</option><option value="month">month</option><option value="year">year</option></select>
+            <label class="small">Split By</label>
+            <select id="anSplitBy"><option value="type">type</option><option value="category">category</option></select>
+            <label class="small">Sort</label>
+            <select id="anSortBy"><option value="group_key">group</option><option value="sum">sum</option><option value="count">count</option></select>
+            <select id="anSortDir"><option value="desc">desc</option><option value="asc">asc</option></select>
+          </div>
+
+          <div class="chart-wrap card" style="padding:12px;margin:0">
+            <canvas id="analyticsChart"></canvas>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button id="loadAnalytics">Load</button>
+            <button id="exportAnalyticsCsv">Export CSV</button>
+          </div>
+          <div id="analyticsJson" class="muted small" style="margin-top:8px;white-space:pre-wrap;max-height:220px;overflow:auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Tip: run backend, then open this file (or serve it) to interact with /api endpoints.</footer>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const API_ROOT = 'http://localhost:8080/api'
+
+// ======== Helpers ========
+
+// Локальный ISO для <input type="datetime-local"> (без Z)
+
+// Локальный ISO только для даты (YYYY-MM-DD)
+function toLocalDateInput(d) {
+  if (!d) return ''
+  const pad = n => String(n).padStart(2,'0')
+  const y = d.getFullYear()
+  const m = pad(d.getMonth()+1)
+  const day = pad(d.getDate())
+  return `${y}-${m}-${day}`
+}
+
+function parseToDateInput(value){
+  if(!value) return ''
+  const d = new Date(value)
+  const pad = n => String(n).padStart(2,'0')
+  const y = d.getFullYear()
+  const m = pad(d.getMonth()+1)
+  const day = pad(d.getDate())
+  return `${y}-${m}-${day}`
+}
+
+// Формируем query string
+function qs(params) {
+  return Object.entries(params)
+    .filter(([_k,v])=>v!==undefined && v!==null && v!=='')
+    .map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&')
+}
+
+// ======== Transaction Form ========
+const txForm = document.getElementById('txForm')
+const txId = document.getElementById('txId')
+const txType = document.getElementById('txType')
+const txCategory = document.getElementById('txCategory')
+const txAmount = document.getElementById('txAmount')
+const txDate = document.getElementById('txDate')
+const txDesc = document.getElementById('txDesc')
+const saveBtn = document.getElementById('saveBtn')
+const resetBtn = document.getElementById('resetBtn')
+const formMsg = document.getElementById('formMsg')
+
+saveBtn.addEventListener('click', async ()=>{
+  formMsg.textContent = ''
+  const id = txId.value
+  const payload = {
+    Type: txType.value,
+    Category: txCategory.value,
+    Amount: parseFloat(txAmount.value),
+    Date: txDate.value,  // локальное время
+    Description: txDesc.value
+  }
+  try{
+    let res
+    if(id) {
+      res = await fetch(`${API_ROOT}/items/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      })
+    } else {
+      res = await fetch(`${API_ROOT}/items`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      })
+    }
+    const data = await res.json()
+    if(!res.ok) throw new Error(data.error || JSON.stringify(data))
+    formMsg.textContent = 'Saved OK'
+    resetForm()
+    loadTransactions()
+  } catch(err) {
+    formMsg.textContent = 'Error: '+err.message
+  }
+})
+
+resetBtn.addEventListener('click', ()=>resetForm())
+
+function resetForm(){
+  txId.value=''
+  txType.value='income'
+  txCategory.value=''
+  txAmount.value=''
+  txDate.value = toLocalDateInput(new Date())  // локальное время
+  txDesc.value=''
+  formMsg.textContent=''
+}
+resetForm()
+
+// ======== Transactions List ========
+const filterFrom = document.getElementById('filterFrom')
+const filterTo = document.getElementById('filterTo')
+const filterType = document.getElementById('filterType')
+const filterCategory = document.getElementById('filterCategory')
+const filterSortBy = document.getElementById('filterSortBy')
+const filterSortDir = document.getElementById('filterSortDir')
+const applyFilters = document.getElementById('applyFilters')
+const exportCsv = document.getElementById('exportCsv')
+const txTableBody = document.querySelector('#txTable tbody')
+const txMsg = document.getElementById('txMsg')
+
+applyFilters.addEventListener('click', ()=>loadTransactions())
+exportCsv.addEventListener('click', ()=>exportTransactionsCsv())
+
+async function loadTransactions(){
+  txTableBody.innerHTML = ''
+  txMsg.textContent = 'Loading...'
+
+  // Локальные даты без конверсии в UTC
+  const from = filterFrom.value || ''
+  const to = filterTo.value || ''
+
+  const params = {
+    from, to,
+    type: filterType.value,
+    category: filterCategory.value,
+    sortBy: filterSortBy.value,
+    sortDir: filterSortDir.value
+  }
+
+  try{
+    const res = await fetch(`${API_ROOT}/items?${qs(params)}`)
+    if(!res.ok){ const err = await res.json(); throw new Error(err.error||res.statusText) }
+    const data = await res.json()
+    if(!Array.isArray(data)) throw new Error('unexpected response')
+    if(data.length===0) txMsg.textContent = 'No transactions'
+    else txMsg.textContent = ''
+
+    for(const tr of data){
+      const trRow = document.createElement('tr')
+      trRow.innerHTML = `
+        <td>${tr.ID}</td>
+        <td>${tr.Type}</td>
+        <td>${tr.Category}</td>
+        <td>${Number(tr.Amount).toFixed(2)}</td>
+        <td>${tr.Date}</td>
+        <td>${tr.Description||''}</td>
+        <td class="row-actions">
+          <button data-id="${tr.ID}" class="edit">Edit</button>
+          <button data-id="${tr.ID}" class="del" style="background:#ef4444">Delete</button>
+        </td>
+      `
+      txTableBody.appendChild(trRow)
+    }
+
+    // attach handlers
+    document.querySelectorAll('.edit').forEach(b=>b.addEventListener('click', onEdit))
+    document.querySelectorAll('.del').forEach(b=>b.addEventListener('click', onDelete))
+  }catch(err){txMsg.textContent = 'Error: '+err.message}
+}
+
+async function onEdit(e){
+  const id = e.target.dataset.id
+  const res = await fetch(`${API_ROOT}/items/${encodeURIComponent(id)}`)
+  const data = await res.json()
+  if(!res.ok){ alert(data.error||'failed'); return }
+
+  const tr = data
+  txId.value = tr.ID
+  txType.value = tr.Type
+  txCategory.value = tr.Category
+  txAmount.value = tr.Amount
+  txDate.value = parseToDateInput(tr.Date)  // локальное время
+  txDesc.value = tr.Description
+  window.scrollTo({top:0,behavior:'smooth'})
+}
+
+async function onDelete(e){
+  if(!confirm('Delete transaction?')) return
+  const id = e.target.dataset.id
+  const res = await fetch(`${API_ROOT}/items/${id}`, {method:'DELETE'})
+  if(res.ok){ loadTransactions() } else { const d = await res.json(); alert(d.error||'failed') }
+}
+
+async function exportTransactionsCsv(){
+  const from = filterFrom.value || ''
+  const to = filterTo.value || ''
+  const params = {
+    from, to,
+    type: filterType.value,
+    category: filterCategory.value,
+    sortBy: filterSortBy.value,
+    sortDir: filterSortDir.value
+  }
+  window.location = `${API_ROOT}/items/export?${qs(params)}`
+}
+
+// ======== Analytics ========
+const anFrom = document.getElementById('anFrom')
+const anTo = document.getElementById('anTo')
+const anGroupBy = document.getElementById('anGroupBy')
+const anSplitBy = document.getElementById('anSplitBy')
+const anSortBy = document.getElementById('anSortBy')
+const anSortDir = document.getElementById('anSortDir')
+const loadAnalyticsBtn = document.getElementById('loadAnalytics')
+const exportAnalyticsCsvBtn = document.getElementById('exportAnalyticsCsv')
+const analyticsJson = document.getElementById('analyticsJson')
+let analyticsChart = null
+
+loadAnalyticsBtn.addEventListener('click',()=>loadAnalytics())
+exportAnalyticsCsvBtn.addEventListener('click',()=>{
+  const from = anFrom.value || ''
+  const to = anTo.value || ''
+  const params = {from,to,groupby:anGroupBy.value,splitby:anSplitBy.value,sortby:anSortBy.value,sortdir:anSortDir.value}
+  window.location = `${API_ROOT}/analytics/export?${qs(params)}`
+})
+
+async function loadAnalytics(){
+  analyticsJson.textContent = 'Loading...'
+  const from = anFrom.value || ''
+  const to = anTo.value || ''
+  const params = {from,to,groupby:anGroupBy.value,splitby:anSplitBy.value,sortby:anSortBy.value,sortdir:anSortDir.value}
+  try{
+    const res = await fetch(`${API_ROOT}/analytics?${qs(params)}`)
+    if(!res.ok){ const d = await res.json(); throw new Error(d.error||res.statusText) }
+    const data = await res.json()
+    analyticsJson.textContent = JSON.stringify(data, null, 2)
+    renderAnalyticsChart(data)
+  }catch(err){analyticsJson.textContent = 'Error: '+err.message}
+}
+
+function renderAnalyticsChart(data){
+  const labels = data.Groups.map(g=>g.GroupKey)
+  const allSums = data.Groups.map(g=>g.Data.All.Sum)
+  const incomeSums = data.Groups.map(g=>g.Data.Income?g.Data.Income.Sum:0)
+  const expenseSums = data.Groups.map(g=>g.Data.Expense?g.Data.Expense.Sum:0)
+
+  const ctx = document.getElementById('analyticsChart').getContext('2d')
+  if(analyticsChart) analyticsChart.destroy()
+  analyticsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {label:'Income', data: incomeSums, backgroundColor: 'rgba(56,189,248,0.6)'},
+        {label:'Expense', data: expenseSums, backgroundColor: 'rgba(248,113,113,0.6)'},
+        {label:'All', data: allSums, backgroundColor: 'rgba(99,102,241,0.6)'}
+      ]
+    },
+    options: {responsive:true, maintainAspectRatio:false}
+  })
+}
+
+// ======== Init ========
+(function init(){
+  const now = new Date()
+  const prior = new Date(); prior.setDate(now.getDate()-30)
+
+  filterFrom.value = toLocalDateInput(prior)
+  filterTo.value   = toLocalDateInput(now)
+  anFrom.value     = toLocalDateInput(prior)
+  anTo.value       = toLocalDateInput(now)
+
+  txDate.value = toLocalDateInput(now) // локальное время
+  loadTransactions()
+  loadAnalytics()
+})()
+</script>
+</body>
+</html>

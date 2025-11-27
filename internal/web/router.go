@@ -1,9 +1,9 @@
 package web
 
 import (
-	// _ "salestracker/docs"
 	httpSwagger "github.com/swaggo/http-swagger"
 	wbgin "github.com/wb-go/wbf/ginext"
+	_ "salestracker/docs"
 	"salestracker/internal/web/handlers"
 )
 

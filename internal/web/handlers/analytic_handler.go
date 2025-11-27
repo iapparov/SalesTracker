@@ -9,20 +9,39 @@ import (
 	"time"
 )
 
+// AnalyticsHandler обрабатывает запросы для аналитики транзакций
 type AnalyticsHandler struct {
 	Service AnalyticsIFace
 }
 
+// AnalyticsIFace описывает интерфейс сервиса аналитики
 type AnalyticsIFace interface {
 	GetAnalytics(from, to time.Time, groupBy, splitBy, sortBy, sortDir string) (*analytic.Analytics, error)
 	GetCSV(from, to time.Time, groupBy, splitBy, sortBy, sortDir string, output io.Writer) error
 }
 
+// NewAnalyticHandler создает новый AnalyticsHandler
 func NewAnalyticHandler(service AnalyticsIFace) *AnalyticsHandler {
 	return &AnalyticsHandler{
 		Service: service,
 	}
 }
+
+// GetAnalys godoc
+// @Summary Получить агрегированную аналитику
+// @Description Возвращает агрегированные данные транзакций за указанный период с возможностью группировки, разделения и сортировки
+// @Tags Analytics
+// @Produce json
+// @Param from query string true "Дата начала (YYYY-MM-DD)"
+// @Param to query string true "Дата конца (YYYY-MM-DD)"
+// @Param groupby query string false "Группировка (day/week/month/category)"
+// @Param splitby query string false "Разделение данных (например по типу транзакции)"
+// @Param sortby query string false "Поле для сортировки"
+// @Param sortdir query string false "Направление сортировки (asc/desc)"
+// @Success 200 {object} analytic.Analytics
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/analytics [get]
 func (h *AnalyticsHandler) GetAnalys(ctx *wbgin.Context) {
 	var AnalyticsReq dto.AnalyticsReq
 	AnalyticsReq.From = ctx.Query("from")
@@ -60,6 +79,20 @@ func (h *AnalyticsHandler) GetAnalys(ctx *wbgin.Context) {
 	ctx.JSON(http.StatusOK, res)
 }
 
+// GetCSV godoc
+// @Summary Экспорт аналитики в CSV
+// @Description Экспортирует агрегированные данные транзакций за указанный период в CSV-файл
+// @Tags Analytics
+// @Param from query string true "Дата начала (YYYY-MM-DD)"
+// @Param to query string true "Дата конца (YYYY-MM-DD)"
+// @Param groupby query string false "Группировка (day/week/month/category)"
+// @Param splitby query string false "Разделение данных (например по типу транзакции)"
+// @Param sortby query string false "Поле для сортировки"
+// @Param sortdir query string false "Направление сортировки (asc/desc)"
+// @Success 200 {file} file "CSV файл"
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/analytics/export [get]
 func (h *AnalyticsHandler) GetCSV(ctx *wbgin.Context) {
 	var AnalyticsReq dto.AnalyticsReq
 	AnalyticsReq.From = ctx.Query("from")

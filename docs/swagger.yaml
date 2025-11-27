@@ -1,0 +1,417 @@
+basePath: /
+definitions:
+  analytic.Analytic:
+    properties:
+      Avg:
+        type: number
+      Count:
+        type: integer
+      Median:
+        type: number
+      Percentile90:
+        type: number
+      Sum:
+        type: number
+    type: object
+  analytic.AnalyticByType:
+    properties:
+      All:
+        $ref: '#/definitions/analytic.Analytic'
+      Expense:
+        $ref: '#/definitions/analytic.Analytic'
+      Income:
+        $ref: '#/definitions/analytic.Analytic'
+    type: object
+  analytic.AnalyticGroup:
+    properties:
+      Data:
+        $ref: '#/definitions/analytic.AnalyticByType'
+      GroupKey:
+        type: string
+    type: object
+  analytic.Analytics:
+    properties:
+      Groups:
+        items:
+          $ref: '#/definitions/analytic.AnalyticGroup'
+        type: array
+      Summary:
+        $ref: '#/definitions/analytic.AnalyticByType'
+    type: object
+  dto.SaveTransactionReq:
+    properties:
+      amount:
+        type: number
+      category:
+        type: string
+      date:
+        type: string
+      description:
+        type: string
+      type:
+        description: income|expense
+        type: string
+    type: object
+  transaction.Transaction:
+    properties:
+      Amount:
+        type: number
+      Category:
+        type: string
+      Date:
+        type: string
+      Description:
+        type: string
+      ID:
+        type: string
+      Type:
+        $ref: '#/definitions/transaction.TransactionType'
+    type: object
+  transaction.TransactionType:
+    enum:
+    - income
+    - expense
+    type: string
+    x-enum-varnames:
+    - Income
+    - Expense
+info:
+  contact: {}
+  description: API для управления продажами и транзакциями.
+  title: salesTracker API
+  version: "1.0"
+paths:
+  /api/analytics:
+    get:
+      description: Возвращает агрегированные данные транзакций за указанный период
+        с возможностью группировки, разделения и сортировки
+      parameters:
+      - description: Дата начала (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Дата конца (YYYY-MM-DD)
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: Группировка (day/week/month/category)
+        in: query
+        name: groupby
+        type: string
+      - description: Разделение данных (например по типу транзакции)
+        in: query
+        name: splitby
+        type: string
+      - description: Поле для сортировки
+        in: query
+        name: sortby
+        type: string
+      - description: Направление сортировки (asc/desc)
+        in: query
+        name: sortdir
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/analytic.Analytics'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить агрегированную аналитику
+      tags:
+      - Analytics
+  /api/analytics/export:
+    get:
+      description: Экспортирует агрегированные данные транзакций за указанный период
+        в CSV-файл
+      parameters:
+      - description: Дата начала (YYYY-MM-DD)
+        in: query
+        name: from
+        required: true
+        type: string
+      - description: Дата конца (YYYY-MM-DD)
+        in: query
+        name: to
+        required: true
+        type: string
+      - description: Группировка (day/week/month/category)
+        in: query
+        name: groupby
+        type: string
+      - description: Разделение данных (например по типу транзакции)
+        in: query
+        name: splitby
+        type: string
+      - description: Поле для сортировки
+        in: query
+        name: sortby
+        type: string
+      - description: Направление сортировки (asc/desc)
+        in: query
+        name: sortdir
+        type: string
+      responses:
+        "200":
+          description: CSV файл
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Экспорт аналитики в CSV
+      tags:
+      - Analytics
+  /api/items:
+    get:
+      description: Возвращает список всех транзакций с фильтрами
+      parameters:
+      - description: Дата от
+        in: query
+        name: from
+        type: string
+      - description: Дата до
+        in: query
+        name: to
+        type: string
+      - description: Тип транзакции (income/expense)
+        in: query
+        name: type
+        type: string
+      - description: Категория
+        in: query
+        name: category
+        type: string
+      - description: Поле сортировки
+        in: query
+        name: sortBy
+        type: string
+      - description: Направление сортировки (asc/desc)
+        in: query
+        name: sortDir
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/transaction.Transaction'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить все транзакции
+      tags:
+      - Transactions
+    post:
+      consumes:
+      - application/json
+      description: Создает транзакцию с типом (income/expense), категорией, суммой,
+        датой и описанием
+      parameters:
+      - description: Данные транзакции
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SaveTransactionReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transaction.Transaction'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Создать новую транзакцию
+      tags:
+      - Transactions
+  /api/items/{id}:
+    delete:
+      description: Удаляет транзакцию по ID
+      parameters:
+      - description: ID транзакции
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Удалить транзакцию
+      tags:
+      - Transactions
+    get:
+      description: Возвращает транзакцию по ID
+      parameters:
+      - description: ID транзакции
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transaction.Transaction'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Получить транзакцию
+      tags:
+      - Transactions
+    put:
+      consumes:
+      - application/json
+      description: Обновляет данные транзакции по ID
+      parameters:
+      - description: ID транзакции
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Новые данные транзакции
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SaveTransactionReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transaction.Transaction'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Обновить транзакцию
+      tags:
+      - Transactions
+  /api/items/export:
+    get:
+      description: Экспортирует все транзакции за период в CSV-файл
+      parameters:
+      - description: Дата от
+        in: query
+        name: from
+        type: string
+      - description: Дата до
+        in: query
+        name: to
+        type: string
+      - description: Тип транзакции (income/expense)
+        in: query
+        name: type
+        type: string
+      - description: Категория
+        in: query
+        name: category
+        type: string
+      - description: Поле сортировки
+        in: query
+        name: sortBy
+        type: string
+      - description: Направление сортировки (asc/desc)
+        in: query
+        name: sortDir
+        type: string
+      responses:
+        "200":
+          description: CSV файл
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Экспорт транзакций в CSV
+      tags:
+      - Transactions
+swagger: "2.0"

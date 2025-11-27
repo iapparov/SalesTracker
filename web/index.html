@@ -7,12 +7,6 @@ Features:
 - Export transactions CSV
 - Analytics view: group by day/month/year, split by type/category, sort by aggregates, CSV export
 - Uses vanilla JS + Chart.js (CDN) for charts
-
-Notes:
-- Expects backend at /api as defined in server routes
-- Query params used: from, to, type, category, sortBy, sortDir, groupby, splitby
-- CSV endpoints: /api/items/export and /api/analytics/export
-- CORS: if frontend served from different origin, enable CORS on backend
 --> 
 
 <!doctype html>
@@ -140,11 +134,7 @@ Notes:
 <script>
 const API_ROOT = 'http://localhost:8080/api'
 
-// ======== Helpers ========
-
-// Локальный ISO для <input type="datetime-local"> (без Z)
-
-// Локальный ISO только для даты (YYYY-MM-DD)
+//Helpers
 function toLocalDateInput(d) {
   if (!d) return ''
   const pad = n => String(n).padStart(2,'0')
@@ -164,7 +154,6 @@ function parseToDateInput(value){
   return `${y}-${m}-${day}`
 }
 
-// Формируем query string
 function qs(params) {
   return Object.entries(params)
     .filter(([_k,v])=>v!==undefined && v!==null && v!=='')
@@ -172,7 +161,7 @@ function qs(params) {
     .join('&')
 }
 
-// ======== Transaction Form ========
+//Transaction Form
 const txForm = document.getElementById('txForm')
 const txId = document.getElementById('txId')
 const txType = document.getElementById('txType')
@@ -191,7 +180,7 @@ saveBtn.addEventListener('click', async ()=>{
     Type: txType.value,
     Category: txCategory.value,
     Amount: parseFloat(txAmount.value),
-    Date: txDate.value,  // локальное время
+    Date: txDate.value,
     Description: txDesc.value
   }
   try{
@@ -226,13 +215,13 @@ function resetForm(){
   txType.value='income'
   txCategory.value=''
   txAmount.value=''
-  txDate.value = toLocalDateInput(new Date())  // локальное время
+  txDate.value = toLocalDateInput(new Date()) 
   txDesc.value=''
   formMsg.textContent=''
 }
 resetForm()
 
-// ======== Transactions List ========
+// Transactions List 
 const filterFrom = document.getElementById('filterFrom')
 const filterTo = document.getElementById('filterTo')
 const filterType = document.getElementById('filterType')
@@ -251,7 +240,6 @@ async function loadTransactions(){
   txTableBody.innerHTML = ''
   txMsg.textContent = 'Loading...'
 
-  // Локальные даты без конверсии в UTC
   const from = filterFrom.value || ''
   const to = filterTo.value || ''
 
@@ -288,7 +276,6 @@ async function loadTransactions(){
       txTableBody.appendChild(trRow)
     }
 
-    // attach handlers
     document.querySelectorAll('.edit').forEach(b=>b.addEventListener('click', onEdit))
     document.querySelectorAll('.del').forEach(b=>b.addEventListener('click', onDelete))
   }catch(err){txMsg.textContent = 'Error: '+err.message}
@@ -305,7 +292,7 @@ async function onEdit(e){
   txType.value = tr.Type
   txCategory.value = tr.Category
   txAmount.value = tr.Amount
-  txDate.value = parseToDateInput(tr.Date)  // локальное время
+  txDate.value = parseToDateInput(tr.Date) 
   txDesc.value = tr.Description
   window.scrollTo({top:0,behavior:'smooth'})
 }
@@ -330,7 +317,7 @@ async function exportTransactionsCsv(){
   window.location = `${API_ROOT}/items/export?${qs(params)}`
 }
 
-// ======== Analytics ========
+// Analytics 
 const anFrom = document.getElementById('anFrom')
 const anTo = document.getElementById('anTo')
 const anGroupBy = document.getElementById('anGroupBy')
@@ -386,7 +373,7 @@ function renderAnalyticsChart(data){
   })
 }
 
-// ======== Init ========
+// Init
 (function init(){
   const now = new Date()
   const prior = new Date(); prior.setDate(now.getDate()-30)
@@ -396,7 +383,7 @@ function renderAnalyticsChart(data){
   anFrom.value     = toLocalDateInput(prior)
   anTo.value       = toLocalDateInput(now)
 
-  txDate.value = toLocalDateInput(now) // локальное время
+  txDate.value = toLocalDateInput(now)
   loadTransactions()
   loadAnalytics()
 })()
